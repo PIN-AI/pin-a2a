@@ -26,9 +26,9 @@ from common.types import (
     TextPart,
 )
 from google.genai import types
-# Import Aptos related libraries
-from common.aptos_config import AptosConfig
-from common.aptos_blockchain import AptosTaskManager, AptosSignatureManager
+# Import SUI related libraries
+from common.sui_config import SUIConfig
+from common.sui_blockchain import SUITaskManager, SUISignatureManager
 
 
 logger = logging.getLogger(__name__)
@@ -173,7 +173,7 @@ class AgentTaskManager(InMemoryTaskManager):
             
             # Validate required fields
             if not address:
-                return False, "Missing Aptos address in auth data"
+                return False, "Missing SUI address in auth data"
                 
             if not signature:
                 return False, "Missing signature in auth data"
@@ -201,7 +201,7 @@ class AgentTaskManager(InMemoryTaskManager):
                     signature_hex = signature
                     
                 if len(signature_hex) == 128:  # 64 bytes in hex = 128 hex chars
-                    logger.info(f"[APTOS NETWORK] Service Agent: Ed25519 signature verified for Host Agent address {address}")
+                    logger.info(f"[SUI NETWORK] Service Agent: Ed25519 signature verified for Host Agent address {address}")
                     return True, ""
                 else:
                     return False, f"Invalid signature format for Ed25519: expected 128 hex chars, got {len(signature_hex)}"
@@ -214,7 +214,7 @@ class AgentTaskManager(InMemoryTaskManager):
             return False, f"Error validating signature: {e}"
     
     async def _validate_blockchain_confirmation(self, task_send_params: TaskSendParams) -> tuple[bool, str]:
-        """Validate Aptos blockchain task confirmation.
+        """Validate SUI blockchain task confirmation.
         
         Args:
             task_send_params: Task parameters containing blockchain transaction hash.
@@ -240,30 +240,30 @@ class AgentTaskManager(InMemoryTaskManager):
             module_address = create_task_data.get('module_address')
             
             if not tx_hash:
-                return False, "Missing Aptos transaction hash"
+                return False, "Missing SUI transaction hash"
                 
             # Get session ID which is used as task_id in Aptos
             session_id = task_send_params.sessionId
                 
             # Initialize Aptos config and task manager for validation
-            aptos_config = AptosConfig()
-            if not await aptos_config.is_connected():
-                return False, "Unable to connect to Aptos network"
+            sui_config = SUIConfig()
+            if not await sui_config.is_connected():
+                return False, "Unable to connect to SUI network"
                 
-            aptos_task_manager = AptosTaskManager(aptos_config)
+            sui_task_manager = SUITaskManager(sui_config)
             
             # Check if agent Aptos address is set
             if not self.agent_address:
                 # Try to get from environment variable
-                self.agent_address = os.environ.get('AGENT_APTOS_ADDRESS') or os.environ.get('AGENT_ETH_ADDRESS')
+                self.agent_address = os.environ.get('AGENT_SUI_ADDRESS') or os.environ.get('AGENT_ETH_ADDRESS')
                 
                 if not self.agent_address:
-                    logger.warning("Agent Aptos address not set, skipping blockchain task validation")
+                    logger.warning("Agent SUI address not set, skipping blockchain task validation")
                     return True, "Blockchain validation skipped due to missing agent address"
             
             try:
                 # Verify transaction exists by querying it
-                tx_info = await aptos_config.client.transaction_by_hash(tx_hash)
+                tx_info = await sui_config.client.transaction_by_hash(tx_hash)
                 if not tx_info:
                     return False, f"Transaction {tx_hash} not found on Aptos network"
                     
@@ -278,7 +278,7 @@ class AgentTaskManager(InMemoryTaskManager):
                     # Try to get task info - this requires knowing the task_agent_address
                     # In a real implementation, you'd need to maintain a registry or extract from transaction events
                     # For now, we'll just verify the transaction exists and was successful
-                    print(f"[APTOS NETWORK] Service Agent: Transaction {tx_hash} verified on Aptos network")
+                    print(f"[SUI NETWORK] Service Agent: Transaction {tx_hash} verified on SUI network")
                     return True, ""
                     
                 except Exception as e:
@@ -287,12 +287,12 @@ class AgentTaskManager(InMemoryTaskManager):
                     return True, "Transaction verified but task details not accessible"
                     
             except Exception as e:
-                logger.warning(f"Aptos task validation failed: {e}, but allowing task to proceed")
-                return True, f"Aptos validation failed but proceeding: {e}"
+                logger.warning(f"SUI task validation failed: {e}, but allowing task to proceed")
+                return True, f"SUI validation failed but proceeding: {e}"
             
         except Exception as e:
-            logger.error(f"Error validating Aptos confirmation: {e}")
-            return False, f"Aptos confirmation validation failed: {e}"
+            logger.error(f"Error validating SUI confirmation: {e}")
+            return False, f"SUI confirmation validation failed: {e}"
 
     async def _stream_generator(
         self, request: SendTaskStreamingRequest
