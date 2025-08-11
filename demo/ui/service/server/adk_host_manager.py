@@ -66,8 +66,8 @@ class ADKHostManager(ApplicationManager):
         self._artifact_service = InMemoryArtifactService()
         self._memory_service = InMemoryMemoryService()
         
-        # Get the Aptos private key from environment variable
-        aptos_private_key = os.environ.get('APTOS_PRIVATE_KEY')
+        # Get the SUI private key from environment variable
+        sui_private_key = os.environ.get('TASK_AGENT_PRIVATE_KEY')
         
         # Get default remote agents from environment variable
         default_agents = os.environ.get('DEFAULT_REMOTE_AGENTS', 'http://localhost:10003')
@@ -77,7 +77,7 @@ class ADKHostManager(ApplicationManager):
         self._host_agent = HostAgent(
             remote_agent_addresses=remote_agent_addresses, 
             task_callback=self.task_callback,
-            private_key=aptos_private_key
+            private_key=sui_private_key
         )
         
         self.user_id = 'Pis'

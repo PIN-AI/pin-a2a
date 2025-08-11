@@ -21,9 +21,9 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools.tool_context import ToolContext
 from google.genai import types
-# Import Aptos related libraries
-from common.aptos_config import AptosConfig
-from common.aptos_blockchain import AptosTaskManager, AptosSignatureManager
+# Import SUI related libraries
+from common.sui_config import SUIConfig
+from common.sui_blockchain import SUITaskManager, SUISignatureManager
 
 from .remote_agent_connection import RemoteAgentConnections, TaskUpdateCallback
 
@@ -48,13 +48,13 @@ class HostAgent:
         self.remote_agent_connections: dict[str, RemoteAgentConnections] = {}
         self.cards: dict[str, AgentCard] = {}
         
-        # Initialize Aptos configuration
-        self.aptos_config = AptosConfig(private_key)
-        self.aptos_task_manager = AptosTaskManager(self.aptos_config)
-        self.aptos_signature_manager = AptosSignatureManager(self.aptos_config.account) if self.aptos_config.account else None
+        # Initialize SUI configuration
+        self.sui_config = SUIConfig(private_key)
+        self.sui_task_manager = SUITaskManager(self.sui_config)
+        self.sui_signature_manager = SUISignatureManager(self.sui_config)
         
-        # Set Aptos address for backward compatibility
-        self.aptos_address = str(self.aptos_config.address) if self.aptos_config.address else None
+        # Set SUI address for backward compatibility
+        self.sui_address = self.sui_config.address
                 
         for address in remote_agent_addresses:
             card_resolver = A2ACardResolver(address)
@@ -207,7 +207,7 @@ Current agent: {current_agent['active_agent']}
         return user_context
 
     def sign_message(self, message: str) -> str:
-        """Sign a message using the host agent's Aptos private key.
+        """Sign a message using the host agent's SUI private key.
         
         Args:
             message: The message to sign.
@@ -215,13 +215,13 @@ Current agent: {current_agent['active_agent']}
         Returns:
             The hex string of the signature if successful, or None if failed.
         """
-        if not self.aptos_signature_manager:
+        if not self.sui_signature_manager:
             return None
             
         try:
-            signature = self.aptos_signature_manager.sign_message(message)
+            signature = self.sui_signature_manager.sign_message(message)
             if signature:
-                logger.debug(f"[APTOS NETWORK] Host Agent: signed message with Ed25519, address: {self.aptos_address}")
+                logger.debug(f"[SUI NETWORK] Host Agent: signed message with Ed25519, address: {self.sui_address}")
             return signature
         except Exception as e:
             logger.error(f"Error signing message with Ed25519: {e}")
@@ -230,9 +230,9 @@ Current agent: {current_agent['active_agent']}
     async def confirm_task(
         self, agent_name: str, message: str, tool_context: ToolContext
     ):
-        """Interacts with Aptos blockchain to confirm tasks and sends them to remote agents.
+        """Interacts with SUI blockchain to confirm tasks and sends them to remote agents.
         
-        This method is similar to send_task but registers task confirmation on Aptos blockchain.
+        This method is similar to send_task but registers task confirmation on SUI blockchain.
         
         Args:
           agent_name: The name of the remote agent
@@ -260,66 +260,66 @@ Current agent: {current_agent['active_agent']}
             taskId = str(uuid.uuid4())
         sessionId = state['session_id']
         
-        # Get remote agent's Aptos address
+        # Get remote agent's SUI address
         remote_agent_address = None
         if hasattr(card, 'metadata') and card.metadata:
-            remote_agent_address = card.metadata.get('aptos_address') or card.metadata.get('ethereum_address')
+            remote_agent_address = card.metadata.get('sui_address') or card.metadata.get('aptos_address') or card.metadata.get('ethereum_address')
             
         # If not found in card metadata, try environment variables
         if not remote_agent_address:
-            remote_agent_address = os.environ.get('REMOTE_AGENT_APTOS_ADDRESS', "0x69029bc61f9828ed712a9238f70b4fe629b35144cd638a50f60bd278916b33c5")
+            remote_agent_address = os.environ.get('REMOTE_AGENT_SUI_ADDRESS') or os.environ.get('REMOTE_AGENT_APTOS_ADDRESS', "0x69029bc61f9828ed712a9238f70b4fe629b35144cd638a50f60bd278916b33c5")
             
         if not remote_agent_address:
-            raise ValueError(f"Could not determine Aptos address for remote agent {agent_name}")
+            raise ValueError(f"Could not determine SUI address for remote agent {agent_name}")
             
-        # Check Aptos connection
+        # Check SUI connection
         try:
-            if not await self.aptos_config.is_connected():
-                raise ConnectionError("Unable to connect to Aptos network")
+            if not await self.sui_config.is_connected():
+                raise ConnectionError("Unable to connect to SUI network")
         except Exception as e:
-            logger.warning(f"Aptos connection error: {e}")
+            logger.warning(f"SUI connection error: {e}")
             logger.info(f"Falling back to regular send_task without blockchain confirmation")
             # Fallback to regular send_task when blockchain is not available
             return await self.send_task(agent_name, message, tool_context)
             
-        # Cannot proceed without account
-        if not self.aptos_config.account:
-            raise ValueError("Host Agent has no Aptos account configured, cannot perform blockchain confirmation")
+        # Cannot proceed without private key
+        if not self.sui_config.private_key:
+            raise ValueError("Host Agent has no SUI private key configured, cannot perform blockchain confirmation")
             
-        # Default bounty: 0.01 APT (in octas)
-        bounty = int(os.environ.get('APTOS_TASK_BOUNTY', "1000000"))  # 0.01 APT = 1,000,000 octas
-        deadline_seconds = int(os.environ.get('APTOS_TASK_DEADLINE', "7200"))  # 2 hours default
+        # Default bounty: 0.01 SUI (in MIST)
+        bounty = int(os.environ.get('SUI_TASK_BOUNTY', "10000000"))  # 0.01 SUI = 10,000,000 MIST
+        deadline_seconds = int(os.environ.get('SUI_TASK_DEADLINE', "7200"))  # 2 hours default
         
         try:
-            # Create task on Aptos blockchain using sessionId as task_id
+            # Create task on SUI blockchain using sessionId as task_id
             task_description = f"A2A Task: {message[:100]}..."  # Truncate for description
             
             # Add detailed logging for debugging
-            print(f"[APTOS DEBUG] Creating task with parameters:")
+            print(f"[SUI DEBUG] Creating task with parameters:")
             print(f"  task_id: {sessionId}")
             print(f"  service_agent: {remote_agent_address}")
-            print(f"  amount_apt: {bounty}")
+            print(f"  amount_sui: {bounty}")
             print(f"  deadline_seconds: {deadline_seconds}")
             print(f"  description: {task_description}")
-            print(f"  host_address: {self.aptos_config.address}")
-            print(f"  module_address: {self.aptos_config.module_address}")
+            print(f"  host_address: {self.sui_config.address}")
+            print(f"  package_id: {self.sui_config.task_manager_package_id}")
 
-            result = await self.aptos_task_manager.create_task(
+            result = await self.sui_task_manager.create_task(
                 task_id=sessionId,  # Use sessionId as task_id for consistency
                 service_agent=remote_agent_address,
-                amount_apt=bounty,
+                amount_sui=bounty,
                 deadline_seconds=deadline_seconds,
                 description=task_description
             )
             
             if not result.get('success'):
-                raise Exception(f"Failed to create task on Aptos: {result.get('error')}")
+                raise Exception(f"Failed to create task on SUI: {result.get('error')}")
                 
             tx_hash = result.get('tx_hash')
-            logger.info(f"[APTOS NETWORK] Host Agent: task created successfully! tx: {tx_hash}")
+            logger.info(f"[SUI NETWORK] Host Agent: task created successfully! tx: {tx_hash}")
             
         except Exception as e:
-            logger.warning(f"Aptos transaction error: {e}")
+            logger.warning(f"SUI transaction error: {e}")
             logger.info(f"Falling back to regular send_task without blockchain confirmation")
             # Fallback to regular send_task when blockchain transaction fails
             return await self.send_task(agent_name, message, tool_context)
@@ -339,12 +339,12 @@ Current agent: {current_agent['active_agent']}
         
         # Add signature information to metadata
         signature = None
-        if self.aptos_address:
-            message_to_sign = f"{self.aptos_address}{sessionId}"
+        if self.sui_address:
+            message_to_sign = f"{self.sui_address}{sessionId}"
             signature = self.sign_message(message_to_sign)
             if signature:
                 metadata["auth"] = {
-                    "address": self.aptos_address,
+                    "address": self.sui_address,
                     "signature": signature
                 }
         
@@ -352,7 +352,7 @@ Current agent: {current_agent['active_agent']}
         metadata["blockchain"] = {
             "createTask": {
                 "tx_hash": tx_hash,
-                "module_address": self.aptos_config.module_address
+                "package_id": self.sui_config.task_manager_package_id
             }
         }
         
@@ -415,8 +415,9 @@ Current agent: {current_agent['active_agent']}
             "blockchain_confirmation": {
                 "createTask": {
                     "transaction_hash": tx_hash,
-                    "module_address": self.aptos_config.module_address,
+                    "package_id": self.sui_config.task_manager_package_id,
                     "task_id": sessionId,
+                    "task_object_id": result.get('task_object_id'),
                     "gas_used": result.get('gas_used', 0)
                 }
             }
@@ -455,9 +456,9 @@ Current agent: {current_agent['active_agent']}
         
         # Generate Ed25519 signature for authentication
         signature = None
-        if self.aptos_signature_manager and self.aptos_address:
+        if self.sui_signature_manager and self.sui_address:
             # Sign message combining agent address and session ID
-            message_to_sign = f"{self.aptos_address}{sessionId}"
+            message_to_sign = f"{self.sui_address}{sessionId}"
             signature = self.sign_message(message_to_sign)
         
         task: Task
@@ -474,10 +475,10 @@ Current agent: {current_agent['active_agent']}
         metadata.update(conversation_id=sessionId, message_id=messageId)
         
         # Add signature information to metadata if available
-        if signature and self.aptos_address:
+        if signature and self.sui_address:
             metadata.update({
                 "auth": {
-                    "address": self.aptos_address,
+                    "address": self.sui_address,
                     "signature": signature
                 }
             })

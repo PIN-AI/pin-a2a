@@ -37,12 +37,11 @@ class SUITaskManager:
             包含交易结果的字典
         """
         try:
-            # 创建TypeScript脚本来执行create_task交易
-            ts_script = f'''
-            import {{ Ed25519Keypair }} from "@mysten/sui/keypairs/ed25519";
-            import {{ Transaction }} from "@mysten/sui/transactions";
-            import {{ SuiClient, getFullnodeUrl }} from "@mysten/sui/client";
-            import * as dotenv from "dotenv";
+            # 创建JavaScript脚本来执行create_task交易（使用CommonJS格式）
+            js_script = f'''
+            const {{ Ed25519Keypair }} = require("@mysten/sui/keypairs/ed25519");
+            const {{ Transaction }} = require("@mysten/sui/transactions");
+            const {{ SuiClient, getFullnodeUrl }} = require("@mysten/sui/client");
             
             async function createTask() {{
                 try {{
@@ -113,13 +112,19 @@ class SUITaskManager:
             createTask();
             '''
             
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.ts', delete=False) as temp_file:
-                temp_file.write(ts_script)
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as temp_file:
+                temp_file.write(js_script)
                 temp_file_path = temp_file.name
             
             try:
-                result = subprocess.run(['npx', 'ts-node', temp_file_path], 
-                                      capture_output=True, text=True, timeout=120)
+                # 设置NODE_PATH环境变量，确保能找到demo/ui/node_modules
+                node_modules_path = "/Users/pis/workspace/PIN/pin-a2a/demo/ui/node_modules"
+                env = os.environ.copy()
+                env['NODE_PATH'] = node_modules_path
+                
+                result = subprocess.run(['node', temp_file_path], 
+                                      capture_output=True, text=True, timeout=120,
+                                      env=env)
                 os.unlink(temp_file_path)
                 
                 if result.returncode == 0:
@@ -177,11 +182,11 @@ class SUITaskManager:
             if not service_agent_key:
                 return {'success': False, 'error': 'SERVICE_AGENT_PRIVATE_KEY not found'}
             
-            # 创建TypeScript脚本来执行complete_task交易
-            ts_script = f'''
-            import {{ Ed25519Keypair }} from "@mysten/sui/keypairs/ed25519";
-            import {{ Transaction }} from "@mysten/sui/transactions";
-            import {{ SuiClient, getFullnodeUrl }} from "@mysten/sui/client";
+            # 创建JavaScript脚本来执行complete_task交易（使用CommonJS格式）
+            js_script = f'''
+            const {{ Ed25519Keypair }} = require("@mysten/sui/keypairs/ed25519");
+            const {{ Transaction }} = require("@mysten/sui/transactions");
+            const {{ SuiClient, getFullnodeUrl }} = require("@mysten/sui/client");
             
             async function completeTask() {{
                 try {{
@@ -232,13 +237,19 @@ class SUITaskManager:
             completeTask();
             '''
             
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.ts', delete=False) as temp_file:
-                temp_file.write(ts_script)
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as temp_file:
+                temp_file.write(js_script)
                 temp_file_path = temp_file.name
             
             try:
-                result = subprocess.run(['npx', 'ts-node', temp_file_path], 
-                                      capture_output=True, text=True, timeout=60)
+                # 设置NODE_PATH环境变量，确保能找到demo/ui/node_modules
+                node_modules_path = "/Users/pis/workspace/PIN/pin-a2a/demo/ui/node_modules"
+                env = os.environ.copy()
+                env['NODE_PATH'] = node_modules_path
+                
+                result = subprocess.run(['node', temp_file_path], 
+                                      capture_output=True, text=True, timeout=60,
+                                      env=env)
                 os.unlink(temp_file_path)
                 
                 if result.returncode == 0:
@@ -363,29 +374,39 @@ class SUISignatureManager:
             签名的十六进制字符串
         """
         try:
-            # 创建临时TypeScript脚本来签名
-            ts_script = f'''
-            import {{ Ed25519Keypair }} from "@mysten/sui/keypairs/ed25519";
+            # 创建临时JavaScript脚本来签名（使用CommonJS格式）
+            js_script = f'''
+            const {{ Ed25519Keypair }} = require("@mysten/sui/keypairs/ed25519");
             
             try {{
                 const keypair = Ed25519Keypair.fromSecretKey("{self.config.private_key}");
                 const messageBytes = new TextEncoder().encode("{message}");
-                const signature = await keypair.sign(messageBytes);
-                console.log(signature.signature);
-                process.exit(0);
+                keypair.sign(messageBytes).then(signature => {{
+                    console.log(signature.signature);
+                    process.exit(0);
+                }}).catch(error => {{
+                    console.error("Error:", error.message);
+                    process.exit(1);
+                }});
             }} catch (error) {{
                 console.error("Error:", error.message);
                 process.exit(1);
             }}
             '''
             
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.ts', delete=False) as temp_file:
-                temp_file.write(ts_script)
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as temp_file:
+                temp_file.write(js_script)
                 temp_file_path = temp_file.name
             
             try:
-                result = subprocess.run(['npx', 'ts-node', temp_file_path], 
-                                      capture_output=True, text=True, timeout=30)
+                # 设置NODE_PATH环境变量，确保能找到demo/ui/node_modules
+                node_modules_path = "/Users/pis/workspace/PIN/pin-a2a/demo/ui/node_modules"
+                env = os.environ.copy()
+                env['NODE_PATH'] = node_modules_path
+                
+                result = subprocess.run(['node', temp_file_path], 
+                                      capture_output=True, text=True, timeout=30,
+                                      env=env)
                 os.unlink(temp_file_path)
                 
                 if result.returncode == 0:
