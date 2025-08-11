@@ -2,9 +2,9 @@ import logging
 import os
 
 import click
-from common.aptos_config import AptosConfig
+from common.sui_config import SUIConfig
 
-from agent import FoodOrderingAgent
+from agents.food_ordering_services.agent import FoodOrderingAgent
 from common.server import A2AServer
 from common.types import (
     AgentCapabilities,
@@ -13,7 +13,7 @@ from common.types import (
     MissingAPIKeyError,
 )
 from dotenv import load_dotenv
-from task_manager import AgentTaskManager
+from agents.food_ordering_services.task_manager import AgentTaskManager
 
 
 load_dotenv()
@@ -39,8 +39,8 @@ logging.getLogger('common.server.task_manager').setLevel(logging.INFO)
 @click.option('--host', default='localhost')
 @click.option('--port', default=10002)
 @click.option('--verify-signatures', is_flag=True, default=True, help='Enable signature verification')
-@click.option('--aptos-address', default=None, help='Aptos address for Remote Agent (optional)')
-def main(host, port, verify_signatures, aptos_address):
+@click.option('--sui-address', default=None, help='SUI address for Remote Agent (optional)')
+def main(host, port, verify_signatures, sui_address):
     try:
         # Check for API key only if Vertex AI is not configured
         if not os.getenv('GOOGLE_GENAI_USE_VERTEXAI') == 'TRUE':
@@ -49,20 +49,20 @@ def main(host, port, verify_signatures, aptos_address):
                     'GOOGLE_API_KEY environment variable not set and GOOGLE_GENAI_USE_VERTEXAI is not TRUE.'
                 )
 
-        # If aptos_address is not provided, try to get it from APTOS_PRIVATE_KEY environment variable
-        if not aptos_address:
-            aptos_private_key = os.environ.get('APTOS_PRIVATE_KEY')
-            if aptos_private_key:
+        # If sui_address is not provided, try to get it from SERVICE_AGENT_PRIVATE_KEY environment variable
+        if not sui_address:
+            service_private_key = os.environ.get('SERVICE_AGENT_PRIVATE_KEY')
+            if service_private_key:
                 try:
-                    aptos_config = AptosConfig(private_key=aptos_private_key)
-                    aptos_address = str(aptos_config.address)
-                    logger.info(f"Generated aptos_address from APTOS_PRIVATE_KEY: {aptos_address}")
+                    sui_config = SUIConfig(private_key=service_private_key)
+                    sui_address = sui_config.address
+                    logger.info(f"Generated sui_address from SERVICE_AGENT_PRIVATE_KEY: {sui_address}")
                 except Exception as e:
-                    logger.error(f"Error generating Aptos address from private key: {e}")
-                    aptos_address = '0x123456789abcdef0123456789abcdef012345678'  # Default address
+                    logger.error(f"Error generating SUI address from private key: {e}")
+                    sui_address = '0x0000000000000000000000000000000000000000000000000000000000000001'  # Default address
             else:
-                logger.warning("APTOS_PRIVATE_KEY not set, using default aptos_address")
-                aptos_address = '0x123456789abcdef0123456789abcdef012345678'  # Default address
+                logger.warning("SERVICE_AGENT_PRIVATE_KEY not set, using default sui_address")
+                sui_address = '0x0000000000000000000000000000000000000000000000000000000000000001'  # Default address
 
         capabilities = AgentCapabilities(streaming=False)
         
@@ -103,7 +103,7 @@ def main(host, port, verify_signatures, aptos_address):
             ],
         )
         
-        # Add aptos_address to AgentCard metadata
+        # Add sui_address to AgentCard metadata
         agent_card = AgentCard(
             name='Food Ordering Agent',
             description='This agent helps Bay Area users find restaurants, order food delivery, or make restaurant reservations.',
@@ -113,22 +113,22 @@ def main(host, port, verify_signatures, aptos_address):
             defaultOutputModes=FoodOrderingAgent.SUPPORTED_CONTENT_TYPES,
             capabilities=capabilities,
             skills=[restaurant_skill, delivery_skill, reservation_skill],
-            metadata={"aptos_address": aptos_address}  # Add aptos address
+            metadata={"sui_address": sui_address}  # Add SUI address
         )
         
-        # Initialize the task manager with signature verification and save ethereum_address
+        # Initialize the task manager with signature verification and save sui_address
         logger.info(f"Initializing AgentTaskManager with signature verification: {verify_signatures}")
         agent = FoodOrderingAgent()
         task_manager = AgentTaskManager(
             agent=FoodOrderingAgent(),
             verify_signatures=verify_signatures
         )
-        # Set agent aptos address
-        task_manager.agent_address = aptos_address
-        logger.info(f"Agent aptos address set to: {aptos_address}")
+        # Set agent sui address
+        task_manager.agent_address = sui_address
+        logger.info(f"Agent sui address set to: {sui_address}")
         
         # Also set it as environment variable for easier access
-        os.environ['AGENT_APTOS_ADDRESS'] = aptos_address
+        os.environ['AGENT_SUI_ADDRESS'] = sui_address
         
         server = A2AServer(
             agent_card=agent_card,

@@ -12,10 +12,10 @@ from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools.tool_context import ToolContext
-from task_manager import AgentWithTaskManager
-# Import Aptos related libraries
-from common.aptos_config import AptosConfig
-from common.aptos_blockchain import AptosTaskManager
+from .task_manager import AgentWithTaskManager
+# Import SUI related libraries
+from common.sui_config import SUIConfig
+from common.sui_blockchain import SUITaskManager
 
 
 # Configure logger
@@ -352,23 +352,16 @@ def place_order(order_id: str, tool_context: ToolContext) -> dict[str, Any]:
     
     # Add tracking URL if blockchain transaction was successful
     if blockchain_result and blockchain_result.get('status') == 'completed' and blockchain_result.get('transaction_hash'):
-        # For Aptos network, use Aptos explorer with dynamic network detection
+        # For SUI network, use SUI explorer
         tx_hash = blockchain_result['transaction_hash']
-        # Determine network from environment or default to devnet
-        aptos_node_url = os.environ.get('APTOS_NODE_URL', 'https://fullnode.devnet.aptoslabs.com')
-        if 'mainnet' in aptos_node_url:
-            network = 'mainnet'
-        elif 'testnet' in aptos_node_url:
-            network = 'testnet'
-        else:
-            network = 'devnet'
-        order_response['tracking_url'] = f"https://explorer.aptoslabs.com/txn/{tx_hash}?network={network}"
+        # Use SUI testnet explorer
+        order_response['tracking_url'] = f"https://suiscan.xyz/testnet/tx/{tx_hash}"
     
     return order_response
 
 
 async def _complete_task_on_blockchain(tool_context: ToolContext) -> Optional[dict[str, Any]]:
-    """Complete the task on Aptos blockchain by calling complete_task function.
+    """Complete the task on SUI blockchain by calling complete_task function.
     
     Args:
         tool_context: The tool context containing session information
@@ -388,52 +381,52 @@ async def _complete_task_on_blockchain(tool_context: ToolContext) -> Optional[di
             logger.warning("No session_id found in global agent instance")
             return None
             
-        # Use session_id directly as task_id for Aptos (no conversion needed)
+        # Use session_id directly as task_id for SUI (no conversion needed)
         task_id = session_id
         
         # Get Host Agent address (task creator) from environment
-        host_agent_address = os.environ.get('HOST_AGENT_APTOS_ADDRESS')
+        host_agent_address = os.environ.get('HOST_AGENT_SUI_ADDRESS') or os.environ.get('AGENT_SUI_ADDRESS')
         if not host_agent_address:
-            logger.error("No HOST_AGENT_APTOS_ADDRESS found in environment")
+            logger.error("No HOST_AGENT_SUI_ADDRESS found in environment")
             return None
         
-        # Ensure address format is correct for Aptos
+        # Ensure address format is correct for SUI
         if not host_agent_address.startswith('0x'):
             host_agent_address = '0x' + host_agent_address
             
-        # Initialize Aptos configuration and task manager
+        # Initialize SUI configuration and task manager
         try:
-            aptos_config = AptosConfig()
-            if not await aptos_config.is_connected():
-                logger.error("Unable to connect to Aptos network")
-                return {'status': 'failed', 'error': 'Aptos network connection failed'}
+            sui_config = SUIConfig()
+            if not await sui_config.is_connected():
+                logger.error("Unable to connect to SUI network")
+                return {'status': 'failed', 'error': 'SUI network connection failed'}
                 
-            if not aptos_config.account:
-                logger.error("No Aptos private key found in environment")
-                return {'status': 'failed', 'error': 'Aptos private key not configured'}
+            if not sui_config.account:
+                logger.error("No SUI private key found in environment")
+                return {'status': 'failed', 'error': 'SUI private key not configured'}
                 
-            aptos_task_manager = AptosTaskManager(aptos_config)
+            sui_task_manager = SUITaskManager(sui_config)
         except Exception as e:
-            logger.error(f"Failed to initialize Aptos configuration: {e}")
-            return {'status': 'failed', 'error': f'Aptos initialization failed: {str(e)}'}
+            logger.error(f"Failed to initialize SUI configuration: {e}")
+            return {'status': 'failed', 'error': f'SUI initialization failed: {str(e)}'}
         
-        # Call complete_task on Aptos blockchain
-        result = await aptos_task_manager.complete_task(
+        # Call complete_task on SUI blockchain
+        result = await sui_task_manager.complete_task(
             task_agent_address=host_agent_address,
             task_id=task_id
         )
         
         if result.get('success'):
             tx_hash = result.get('tx_hash')
-            logger.info(f"[APTOS NETWORK] Service Agent: complete_task transaction sent: {tx_hash}")
-            logger.info(f"[APTOS NETWORK] Service Agent: Claimed bounty from task completion")
+            logger.info(f"[SUI NETWORK] Service Agent: complete_task transaction sent: {tx_hash}")
+            logger.info(f"[SUI NETWORK] Service Agent: Claimed bounty from task completion")
             
             return {
                 'status': 'completed',
                 'transaction_hash': tx_hash,
                 'task_id': task_id,
                 'host_agent_address': host_agent_address,
-                'network': 'aptos'
+                'network': 'sui'
             }
         else:
             logger.error(f"Blockchain task completion failed: {result.get('error', 'Unknown error')}")
@@ -443,7 +436,7 @@ async def _complete_task_on_blockchain(tool_context: ToolContext) -> Optional[di
             }
         
     except Exception as e:
-        logger.error(f"Error completing task on Aptos blockchain: {e}")
+        logger.error(f"Error completing task on SUI blockchain: {e}")
         return {
             'status': 'failed',
             'error': str(e)
